@@ -1217,10 +1217,12 @@ function Library:CreateWindow(Properties)
 		local Matches = {}
 
 		for cmdName, cmdData in pairs(Commands) do
-            if cmdName:sub(1, #Input) == Input then
+			local cmdLower = cmdName:lower()
+
+            if cmdLower:sub(1, #Input) == Input then
                 table_insert(Matches, {name = cmdName, data = cmdData, type = "prefix"})
 			else
-                local Distance = Library:LevenshteinDistance(Input, cmdName)
+                local Distance = Library:LevenshteinDistance(Input, cmdLower)
                 if Distance <= 2 then
                     table_insert(Matches, {name = cmdName, data = cmdData, type = "fuzzy", distance = Distance})
 				end
@@ -1272,7 +1274,7 @@ function Library:CreateWindow(Properties)
 
 			for _, Instance in next, CommandsHolderScrolling:GetChildren() do
 				if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
-					local CommandName = Instance.Name:gsub('CommandHolder', ''):lower()
+					local CommandName = Instance.Name:gsub('CommandHolder', '')
 
 					local FoundString = false
 					for _, cmd in ipairs(Commands) do
@@ -1531,9 +1533,9 @@ function Library:CreateWindow(Properties)
 						if textLabel then
 							textLabel.BackgroundColor3 = Library.Theme.BackgroundColor
 							textLabel.TextColor3 = Library.Theme.PrimaryTextColor
-							
+	
 							local cmdName = child.Name:gsub('CommandHolder', '')
-							local cmdData = Commands[cmdName:lower()]
+							local cmdData = Commands[cmdName]
 							if cmdData then
 								local function Highlight(str, col)
 									return string_format('<font color="rgb(%d, %d, %d)">%s</font>', col.r*255, col.g*255, col.b*255, str)
@@ -1598,8 +1600,8 @@ function Library:CreateWindow(Properties)
 	end
 
 	function WindowFunctions:AddCommand(Name, Arguments, Description, Callback)
-		Commands[Name:lower()] = {
-			Name = Name:lower(),
+		Commands[Name] = {
+			Name = Name,
 			Arguments = Arguments,
 			Description = Description,
 			Callback = Callback
