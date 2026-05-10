@@ -1241,61 +1241,78 @@ function Library:CreateWindow(Properties)
 	end
 
 	-- // @Search Commands
-	local SearchEngine = CommandInput:GetPropertyChangedSignal('Text'):Connect(function()
-		if IgnoreNextInput then
-			CommandInput.Text = ""
-			IgnoreNextInput = false
-			return
-		end
+    local SearchEngine = CommandInput:GetPropertyChangedSignal('Text'):Connect(function()
+	    if IgnoreNextInput then
+		    CommandInput.Text = ""
+		    IgnoreNextInput = false
+		    return
+	    end
 
-		if CommandInput.Text == '' then
-			for _, Instance in next, CommandsHolderScrolling:GetChildren() do
-				if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
-					Instance.Visible = true
-					UpdateFrameSizes()
-				end
-			end
+	    local OriginalText = CommandInput.Text
+	
+	    if OriginalText == '' then
+		    for _, Instance in next, CommandsHolderScrolling:GetChildren() do
+			    if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
+				    Instance.Visible = true
+				    UpdateFrameSizes()
+			    end
+		    end
 		else
-			local Split = CommandInput.Text:split()
-			local Full = ''
+		    local Split = {}
+		    for word in OriginalText:gmatch("%S+") do
+			    table_insert(Split, word)
+		    end
 
-			for Index in next, Split do
-				if Index == 1 then
-					Full = Full .. Split[1]:gsub(Library:KeyCodeToString(Library.Prefix), '')
-				else
-					Full = Full .. Split[Index]
-				end
-			end
+		    local Full = ''
+		    local PrefixChar = Library:KeyCodeToString(Library.Prefix)
 
-			CommandInput.Text = Full
+		    for Index, Word in ipairs(Split) do
+			    if Index == 1 then
+				    local CleanWord = Word:gsub(PrefixChar, '')
+				    Full = Full .. CleanWord
+			    else
+				    Full = Full .. ' ' .. Word
+			    end
+		    end
 
-			local CleanSearch = Full:lower()
-			local Commands = GetCorrectedCommand(CleanSearch)
+		    local CleanSearch = Full:lower()
+		
+		    if CleanSearch == '' or CleanSearch == ' ' then
+			    for _, Instance in next, CommandsHolderScrolling:GetChildren() do
+				    if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
+					    Instance.Visible = true
+				    end
+			    end
+			    UpdateFrameSizes()
+			    return
+		    end
+		
+		    local Commands = GetCorrectedCommand(CleanSearch)
 
-			for _, Instance in next, CommandsHolderScrolling:GetChildren() do
-				if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
-					local CommandName = Instance.Name:gsub('CommandHolder', '')
+		    for _, Instance in next, CommandsHolderScrolling:GetChildren() do
+			    if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
+				    local CommandName = Instance.Name:gsub('CommandHolder', '')
 
-					local FoundString = false
-					for _, cmd in ipairs(Commands) do
-						if cmd.name == CommandName then
-							FoundString = true
-							break
-						end
-					end
+				    local FoundString = false
+				    for _, cmd in ipairs(Commands) do
+					    if cmd.name == CommandName then
+						    FoundString = true
+						    break
+					    end
+				    end
 
-                    if not FoundString and #Commands == 0 then
-                        if string_find(CommandName, CleanSearch) then
-                            FoundString = true
-                        end
-					end
+				    if not FoundString and #Commands == 0 then
+					    if string_find(CommandName:lower(), CleanSearch) then
+						    FoundString = true
+					    end
+				    end
 
-					Instance.Visible = FoundString
-					UpdateFrameSizes()
-				end
-			end
-		end
-	end)
+				    Instance.Visible = FoundString
+				    UpdateFrameSizes()
+			    end
+		    end
+	    end
+    end)
     table_insert(Library.Connections, SearchEngine)
 
 	-- // @Execute Command
