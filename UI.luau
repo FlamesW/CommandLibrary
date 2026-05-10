@@ -63,6 +63,7 @@ local clonefunction = (clonefunction or copyfunction or function(func)
     return func 
 end)
 
+-- // @Folder functions fix
 if typeof(clonefunction) == "function" then
     local isfolder_dummy, isfile_dummy, listfiles_dummy = clonefunction(isfolder), clonefunction(isfile), clonefunction(listfiles)
 
@@ -1255,22 +1256,29 @@ function Library:CreateWindow(Properties)
 	-- // @Search Engine
 	local function GetCorrectedCommand(Input)
 	    Input = Input:lower()
-		local Matches = {}
+		local Corrections, SeenCommands = {}, {}
 
 		for cmdName, cmdData in pairs(Commands) do
-			local cmdLower = cmdName:lower()
+            local cmdLower = cmdName:lower()
 
+			local Display = cmdData.IsAlias and cmdData.Name or cmdName
             if cmdLower:sub(1, #Input) == Input then
-                table_insert(Matches, {name = cmdName, data = cmdData, type = "prefix"})
-			else
+                if not SeenCommands[Display] then
+                    table_insert(Corrections, {name = Display, data = Commands[Display], type = "prefix"})
+                    SeenCommands[Display] = true
+                end
+            else
                 local Distance = Library:LevenshteinDistance(Input, cmdLower)
-                if Distance <= 2 then
-                    table_insert(Matches, {name = cmdName, data = cmdData, type = "fuzzy", distance = Distance})
-				end
-			end
+                if Distance <= 2 and #Input >= 3 then
+                    if not SeenCommands[Display] then
+                        table_insert(Corrections, {name = Display, data = Commands[Display], type = "fuzzy", distance = Distance})
+                        SeenCommands[Display] = true
+                    end
+                end
+            end
 		end
 
-		table.sort(Matches, function(a, b)
+		table.sort(Corrections, function(a, b)
 		    if a.type ~= b.type then
                 return a.type == "prefix"
 			elseif a.type == "fuzzy" then
@@ -1278,7 +1286,7 @@ function Library:CreateWindow(Properties)
 			end
 			return a.name < b.name
 		end)
-		return Matches
+		return Corrections
 	end
 
 	-- // @Search Commands
@@ -1289,9 +1297,9 @@ function Library:CreateWindow(Properties)
 		    return
 	    end
 
-	    local OriginalText = CommandInput.Text
+	    local Origins = CommandInput.Text
 	
-	    if OriginalText == '' then
+	    if Origins == '' then
 		    for _, Instance in next, CommandsHolderScrolling:GetChildren() do
 			    if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
 				    Instance.Visible = true
@@ -1300,7 +1308,7 @@ function Library:CreateWindow(Properties)
 		    end
 		else
 		    local Split = {}
-		    for word in OriginalText:gmatch("%S+") do
+		    for word in Origins:gmatch("%S+") do
 			    table_insert(Split, word)
 		    end
 
@@ -1309,8 +1317,7 @@ function Library:CreateWindow(Properties)
 
 		    for Index, Word in ipairs(Split) do
 			    if Index == 1 then
-				    local CleanWord = Word:gsub(PrefixChar, '')
-				    Full = Full .. CleanWord
+				    Full = Full .. Word:gsub(PrefixChar, '')
 			    else
 				    Full = Full .. ' ' .. Word
 			    end
@@ -1667,13 +1674,27 @@ function Library:CreateWindow(Properties)
 	    return Library:CreateNotification(Title, Text, Duration)
 	end
 
-	function WindowFunctions:AddCommand(Name, Arguments, Description, Callback)
+	function WindowFunctions:AddCommand(Name, Arguments, Description, Callback, Options)
+		Options = Options or {}
+
 		Commands[Name] = {
 			Name = Name,
 			Arguments = Arguments,
 			Description = Description,
 			Callback = Callback
 		}
+
+        if Options.Alias then
+            for _, Support in ipairs(type(Options.Alias) == "table" and Options.Alias or {Options.Alias}) do
+                Commands[Support] = {
+                    Name = Name,
+                    Arguments = Arguments,
+                    Description = Description,
+                    Callback = Callback,
+                    IsAlias = true
+				}
+			end
+		end
 
 		local function Highlight(String, Color)
 			return string_format('<font color = "rgb(%d, %d, %d)">%s</font>', Color.r * 255, Color.g * 255, Color.b * 255, String)
@@ -1828,17 +1849,16 @@ Window:NewSection('Main');
 
 Window:AddCommand('Theme', {'Theme'}, 'Dark, Light, Red, Orange, Purple, Blue, Nordic, Krnl', function(Arguments, Speaker)
     local Theme = Arguments[1]
-
     if Theme then
         local Name = Theme:sub(1,1):upper() .. Theme:sub(2):lower()
-
         if Library.Themes[Name] then
-            Window:ChangeTheme(Name); Window:SaveTheme(Name)
+            Window:ChangeTheme(Name)
+            Window:SaveTheme(Name)
         else
             Window:CreateNotification(Project, "Theme not found")
         end
     end
-end)
+end, {Alias = 'test'})
 
 Window:AddCommand('Prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, Speaker)
     local NewPrefix = Arguments[1]
@@ -1862,8 +1882,9 @@ end)
 
 Window:AddCommand('Serverhop', {}, 'Serverhops for you.', function(Arguments, Speaker)
     Window:CreateNotification(Project, 'Attempts to serverhop you...')
-	loadstring(game:HttpGet("https://pastebin.com/raw/UTDqLRxP"))();
-end)
+    loadstring(game:HttpGet("https://pastebin.com/raw/UTDqLRxP"))();
+end,
+{Alias = {'Hop', 'SH', 'ServerSwitch','rejoin'}})
 
 Window:AddCommand('Unload', {}, 'Unloads the Framework', function(Arguments, Speaker)
     Window:Unload()
