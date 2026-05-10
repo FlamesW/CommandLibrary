@@ -56,8 +56,8 @@ local FontFace = Enum.Font.Gotham
 
 -- // @Modules
 local Library, Commands = {}, {}
-local isfolder, isfile, listfiles = isfolder, isfile, listfiles
-Library.ThemeManager = "Example.txt"
+local isfolder, isfile, listfiles, makefolder = isfolder, isfile, listfiles, makefolder
+Library.CommandModuleData = Library.CommandModuleData or "Command Module Library.cfg"
 
 local clonefunction = (clonefunction or copyfunction or function(func) 
     return func 
@@ -88,10 +88,35 @@ if typeof(clonefunction) == "function" then
     end
 end
 
-local function LoadTheme()
-    if readfile then
+local function CreateFolder(FolderPath)
+    if makefolder then
+        pcall(function()
+            makefolder(FolderPath)
+        end)
+    end
+end
+
+local function EnsurePath(FilePath)
+    local Parts = {}
+    for part in FilePath:gmatch("[^\\/]+") do
+        table_insert(Parts, part)
+    end
+    
+    if #Parts > 1 then
+        local CurrentPath = ""
+        for i = 1, #Parts - 1 do
+            CurrentPath = CurrentPath .. Parts[i] .. "/"
+            if isfolder and not isfolder(CurrentPath) then
+                CreateFolder(CurrentPath)
+            end
+        end
+    end
+end
+
+local function LoadConfig(Configuration)
+    if readfile and Configuration then
         local Success, Data = pcall(function()
-            return HttpService:JSONDecode(readfile(Library.ThemeManager))
+            return HttpService:JSONDecode(readfile(Configuration))
         end)
         
         if Success and Data then
@@ -101,10 +126,11 @@ local function LoadTheme()
     return nil
 end
 
-local function SaveTheme(Theme)
-    if writefile then
+local function SaveConfig(Configuration, Setting)
+    if writefile and Configuration then
+        EnsurePath(Configuration)
         local Success, Error = pcall(function()
-            writefile(Library.ThemeManager, HttpService:JSONEncode(Theme))
+            writefile(Configuration, HttpService:JSONEncode(Setting))
         end)
     end
 end
@@ -477,56 +503,56 @@ end
 Library.Transparency = 0
 
 Library.Themes = {
-	['dark'] = {
+	['Dark'] = {
 		BackgroundColor = Color3_fromRGB(40, 40, 40),
 		SecondaryColor = Color3_fromRGB(50, 50, 50),
 		AccentColor = Color3_fromRGB(100, 100, 100),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(175, 175, 175)
 	},
-	['light'] = {
+	['Light'] = {
 		BackgroundColor = Color3_fromRGB(255, 255, 255),
 		SecondaryColor = Color3_fromRGB(225, 225, 225),
 		AccentColor = Color3_fromRGB(125, 125, 125),
 		PrimaryTextColor = Color3_fromRGB(0, 0, 0),
 		SecondaryTextColor = Color3_fromRGB(75, 75, 75)
 	},
-	['red'] = {
+	['Red'] = {
 		BackgroundColor = Color3_fromRGB(0, 0, 0),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(135, 135, 135),
 		AccentColor = Color3_fromRGB(255, 0, 0),
 		SecondaryColor = Color3_fromRGB(50, 50, 50)
 	},
-	['nordic'] = {
+	['Nordic'] = {
 		BackgroundColor = Color3_fromRGB(25, 30, 35),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(135, 135, 135),
 		AccentColor = Color3_fromRGB(50, 60, 70),
 		SecondaryColor = Color3_fromRGB(50, 55, 60)
 	},
-	['purple'] = {
+	['Purple'] = {
 		BackgroundColor = Color3_fromRGB(30, 30, 45),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(135, 135, 135),
 		AccentColor = Color3_fromRGB(60, 60, 80),
 		SecondaryColor = Color3_fromRGB(60, 60, 80)
 	},
-	['krnl'] = {
+	['Krnl'] = {
 		BackgroundColor = Color3_fromRGB(40, 40, 40),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(125, 125, 125),
 		AccentColor = Color3_fromRGB(60, 60, 60),
 		SecondaryColor = Color3_fromRGB(40, 40, 40)
 	},
-	['blue'] = {
+	['Blue'] = {
 		BackgroundColor = Color3_fromRGB(30, 30, 30),
 		PrimaryTextColor = Color3_fromRGB(0, 125, 255),
 		SecondaryTextColor = Color3_fromRGB(255, 255, 255),
 		AccentColor = Color3_fromRGB(0, 125, 255),
 		SecondaryColor = Color3_fromRGB(45, 45, 45)
 	},
-	['orange'] = {
+	['Orange'] = {
 		BackgroundColor = Color3_fromRGB(35, 35, 35),
 		PrimaryTextColor = Color3_fromRGB(255, 255, 255),
 		SecondaryTextColor = Color3_fromRGB(135, 135, 135),
@@ -544,18 +570,33 @@ function Library:CreateWindow(Properties)
 	local Theme = Library:GetProperty('Window', 'Theme', Properties) or Library.Themes.dark
 	local Position = string_lower(Library:GetProperty('Window', 'Position', Properties)) or 'top'
 	local Prefix = Library:StringToKeyCode(Library:GetProperty('Window', 'Prefix', Properties)) or Library:StringToKeyCode(';')
+	local Config = Properties.Config
+
+	if not Config or Config == "" then
+		Config = Library.CommandModuleData
+	end
 
 	Library.Prefix = Prefix
+	Library.Configuration = Config
 	Library.Instance = Library:RandomString(15)
 
-	local Load = LoadTheme()
+	local Load = LoadConfig(Config)
 
-	if Load and Library.Themes[Load] then
-		Library.Theme = Library.Themes[Load]
-		Theme = Library.Theme
-	else
-	    Library.Theme = Theme
-	end
+    if Load then
+        if Load.Prefix then
+            Library.Prefix = Library:StringToKeyCode(Load.Prefix)
+            Prefix = Library.Prefix
+        end
+
+        if Load.Theme and Library.Themes[Load.Theme] then
+            Library.Theme = Library.Themes[Load.Theme]
+            Theme = Library.Theme
+        else
+            Library.Theme = Theme
+        end
+    else
+        Library.Theme = Theme
+    end
 
 	-- // @Custom Theme
 	if type(Theme) == 'table' then
@@ -1585,8 +1626,16 @@ function Library:CreateWindow(Properties)
 		end
 	end
 
-	function WindowFunctions:SaveTheme(Theme)
-	    SaveTheme(Theme)
+    function WindowFunctions:SavePrefix(Prefix)
+        local Config = LoadConfig(Library.Configuration) or {}
+        Config.Prefix = Prefix
+        SaveConfig(Library.Configuration, Config)
+	end
+
+    function WindowFunctions:SaveTheme(Theme)
+        local Config = LoadConfig(Library.Configuration) or {}
+        Config.Theme = Theme
+        SaveConfig(Library.Configuration, Config)
 	end
 
 	function WindowFunctions:Unload()
@@ -1769,7 +1818,8 @@ local Project = "Example Usage";
 
 local Window = Library:CreateWindow({
     Name = Project,
-    Theme =  Library.Themes.dark,
+    Theme =  Library.Themes.Dark,
+	--Config = "Luarmor/yeah/ModuleCommand.json",
     Position = 'bottom',
     Prefix = ";";
 })
@@ -1777,11 +1827,16 @@ local Window = Library:CreateWindow({
 Window:NewSection('Main');
 
 Window:AddCommand('Theme', {'Theme'}, 'Dark, Light, Red, Orange, Purple, Blue, Nordic, Krnl', function(Arguments, Speaker)
-    local Theme = string.lower(Arguments[1])
-    if Library.Themes[Theme] then
-        Window:ChangeTheme(Theme); Window:SaveTheme(Theme)
-    else
-        Window:CreateNotification(Project, "Theme not found")
+    local Theme = Arguments[1]
+
+    if Theme then
+        local Name = Theme:sub(1,1):upper() .. Theme:sub(2):lower()
+
+        if Library.Themes[Name] then
+            Window:ChangeTheme(Name); Window:SaveTheme(Name)
+        else
+            Window:CreateNotification(Project, "Theme not found")
+        end
     end
 end)
 
@@ -1797,6 +1852,8 @@ Window:AddCommand('Prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, 
 
     if (byte >= 97 and byte <= 122) or (byte >= 65 and byte <= 90) or (byte >= 48 and byte <= 57) or byte == 39 or byte == 34 or byte == 92 or byte == 59 or byte == 91 or byte == 93 or byte == 46 or byte == 44 or byte == 47 or byte == 96 or byte == 45 or byte == 61 then
         Window:ChangePrefix(NewPrefix)
+		Window:SavePrefix(NewPrefix)
+
         Window:CreateNotification(Project, 'Your new Prefix is ' .. NewPrefix)
     else
         Window:CreateNotification(Project, 'Invalid prefix!')
