@@ -822,14 +822,14 @@ function Library:CreateWindow(Properties)
 			})
 		})
 
-		Library:Create('Frame', {
+		local CommandsHolder = Library:Create('Frame', {
 			Parent = Main,
 			BackgroundColor3 = Theme.BackgroundColor,
 			BorderSizePixel = 0,
 			BackgroundTransparency = 0.5,
 			Name = 'CommandsHolder',
 			Visible = false,
-			Position = UDim2_new(0, 0, 0, -305),
+			Position = UDim2_new(0, 0, 0, 70),
 			Size = UDim2_new(0, 500, 0, 300)
 		}, {
 			Library:Create('UIStroke', {
@@ -946,7 +946,7 @@ function Library:CreateWindow(Properties)
 			}),
 		})
 
-		Library:Create('Frame', {
+		local CommandsHolder = Library:Create('Frame', {
 			Parent = Main,
 			BackgroundColor3 = Theme.BackgroundColor,
 			BorderSizePixel = 0,
@@ -992,18 +992,6 @@ function Library:CreateWindow(Properties)
 				})
 			})
 		})
-		
-		local IsInCommandsHolder = false
-
-		local CommandEntered = CommandsHolder.MouseEnter:Connect(function()
-		    IsInCommandsHolder = true
-		end)
-		table_insert(Library.Connections, CommandEntered)
-
-		local CommandLeft = CommandsHolder.MouseLeave:Connect(function()
-		    IsInCommandsHolder = false
-		end)
-		table_insert(Library.Connections, CommandLeft)
 	end
 
 	Library:Create('TextLabel', {
@@ -1052,6 +1040,18 @@ function Library:CreateWindow(Properties)
 	local CommandsHolder = Main.CommandsHolder
 	local CommandsHolderScrolling = CommandsHolder.CommandsHolderScrolling
 	local CommandsHolderScrollingListLayout = CommandsHolderScrolling.CommandsHolderScrollingListLayout
+
+    local IsInCommandsHolder = false
+
+    local CommandEntered = CommandsHolder.MouseEnter:Connect(function()
+        IsInCommandsHolder = true
+    end)
+    table_insert(Library.Connections, CommandEntered)
+
+    local CommandLeft = CommandsHolder.MouseLeave:Connect(function()
+        IsInCommandsHolder = false
+    end)
+    table_insert(Library.Connections, CommandLeft)
 
 	for _, Element in next, Main:GetChildren() do
 		if Element:IsA('TextBox') or Element:IsA('TextLabel') or Element:IsA('TextButton') or Element:IsA('ImageButton') then
@@ -1841,7 +1841,7 @@ local Window = Library:CreateWindow({
     Name = Project,
     Theme =  Library.Themes.Dark,
 	--Config = "Luarmor/yeah/ModuleCommand.json",
-    Position = 'bottom',
+    Position = 'top',
     Prefix = ";";
 })
 
