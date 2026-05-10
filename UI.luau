@@ -1841,7 +1841,7 @@ local Window = Library:CreateWindow({
     Name = Project,
     Theme =  Library.Themes.Dark,
 	--Config = "Luarmor/yeah/ModuleCommand.json",
-    Position = 'top',
+    Position = 'bottom',
     Prefix = ";";
 })
 
