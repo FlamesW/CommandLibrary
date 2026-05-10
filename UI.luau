@@ -1124,18 +1124,18 @@ function Library:CreateWindow(Properties)
 		end
 	end
 
-	local IgnoreNextInput = false
-	local HoverDebounce = false
+	Library.IgnoreNextInput = false
+	Library.HoverDebounce = false
 
 	local function OpenList()
 	    if Main.Position.Y == UDim_new(1, 37) or Main.Position.Y == UDim_new(1, 36) or Main.Position.Y == UDim_new(0, -72) then
-			IgnoreNextInput = true
+			Library.IgnoreNextInput = true
 
 			CommandInput:CaptureFocus()
 			CommandInput.Text = ""
         
-		    local moveOffset = string_find(Position, 'bottom') and -36 or 36
-			Library:Tween(Main, {Position = Main.Position + UDim2_new(0, 0, 0, moveOffset)}, 0.25)
+		    local Offset = string_find(Position, 'bottom') and -36 or 36
+			Library:Tween(Main, {Position = Main.Position + UDim2_new(0, 0, 0, Offset)}, 0.25)
 			
 			task_wait(0.1)
 			CommandsHolder.Visible = true
@@ -1158,11 +1158,11 @@ function Library:CreateWindow(Properties)
 	end
 
 	local function CloseList()
-		if not HoverDebounce then
+		if not Library.HoverDebounce then
 			task_spawn(function()
-				HoverDebounce = true
+				Library.HoverDebounce = true
 				task_wait(0.5)
-				HoverDebounce = false 
+				Library.HoverDebounce = false 
 			end)
 
 			if Main.Position.Y == UDim_new(1, 0) or Main.Position.Y == UDim_new(0, -36) then
@@ -1242,9 +1242,9 @@ function Library:CreateWindow(Properties)
 
 	-- // @Search Commands
     local SearchEngine = CommandInput:GetPropertyChangedSignal('Text'):Connect(function()
-	    if IgnoreNextInput then
+	    if Library.IgnoreNextInput then
 		    CommandInput.Text = ""
-		    IgnoreNextInput = false
+		    Library.IgnoreNextInput = false
 		    return
 	    end
 
@@ -1372,14 +1372,16 @@ function Library:CreateWindow(Properties)
 	end
 
     -- // @Command Entered
+    Library.ExecuteQueued = false
+
 	local LostFocus = CommandInput.FocusLost:Connect(function()
+		task_wait(0.05)
+
 		if not IsInCommandsHolder then
 			if Main.Position.Y == UDim_new(1, 0) or Main.Position.Y == UDim_new(0, -36) then
-				if CommandInput.Text ~= '' then
+				if CommandInput.Text ~= '' and not Library.ExecuteQueued then
 					task_spawn(function()
-					    if Library and Library.Prefix then
-						    Execute(CommandInput.Text)
-						end
+						pcall(Execute, CommandInput.Text)
 					end)
 				end
 
@@ -1600,7 +1602,7 @@ function Library:CreateWindow(Properties)
 	    for cmd in pairs(Commands) do
 	        Commands[cmd] = nil
 	    end
-	
+
 		for Instance, _ in pairs(Library) do
 			Library[Instance] = nil
 		end
@@ -1698,11 +1700,14 @@ function Library:CreateWindow(Properties)
 		local Button = CommandHolder[Name .. 'Button']
 
 		local ButtonClicked = Button.MouseButton1Down:Connect(function()
+			Library.ExecuteQueued = true
 			Library:Tween(CommandHolder, {BackgroundColor3 = Library:Lighten(Theme.BackgroundColor)}, 0.25)
 
 			task_wait(0.25)
 			pcall(Execute, Name)
 			Library:Tween(CommandHolder, {BackgroundColor3 = Theme.BackgroundColor}, 0.25)
+		    
+			Library.ExecuteQueued = false
 		end)
 		table_insert(Library.Connections, ButtonClicked)
 
