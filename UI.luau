@@ -3,8 +3,8 @@ local cloneref = (cloneref or clonereference or function(instance: any)
 end)
 
 -- // @Performance
-local type, typeof, pcall, warn, print, error = 
-    type, typeof, pcall, warn, print, error
+local type, typeof, pcall =
+    type, typeof, pcall
 
 local math_random, math_clamp, math_huge = 
     math.random, math.clamp, math.huge
@@ -106,9 +106,6 @@ local function SaveTheme(Theme)
         local Success, Error = pcall(function()
             writefile(Library.ThemeManager, HttpService:JSONEncode(Theme))
         end)
-        if not Success then
-            Library:Log('warn', 'Failed to save theme: ' .. tostring(Error))
-        end
     end
 end
 
@@ -145,18 +142,6 @@ end
 
 -- // @Library Functions
 do
-	function Library:Log(Type, Message)
-		Type = Type:lower()
-
-		if Type == 'error' then
-			error('[ @Visual ] Error: ' .. Message)
-		elseif Type == 'log' then
-			print('[ @Visual ] ' .. Message)
-		elseif Type == 'warn' then
-			warn('[ @Visual ] Warning: ' .. Message)
-		end
-	end
-
 	function Library:RandomString(Length)
 		local Length = Length or 15
 		local Characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -297,7 +282,7 @@ do
             return
         end
     end
-    
+
     function Library:LevenshteinDistance(str1, str2)
         local len1, len2 = #str1, #str2
         local matrix = {}
@@ -919,9 +904,6 @@ function Library:CreateWindow(Properties)
 			}),
 		})
 
-		local IsInCommandsHolder = false
-		local HoverDebounce = false
-		
 		Library:Create('Frame', {
 			Parent = Main,
 			BackgroundColor3 = Theme.BackgroundColor,
@@ -969,6 +951,8 @@ function Library:CreateWindow(Properties)
 			})
 		})
 		
+		local IsInCommandsHolder = false
+
 		local CommandEntered = CommandsHolder.MouseEnter:Connect(function()
 		    IsInCommandsHolder = true
 		end)
@@ -1139,13 +1123,13 @@ function Library:CreateWindow(Properties)
 			end
 		end
 	end
-	
+
 	local IgnoreNextInput = false
-	
+	local HoverDebounce = false
+
 	local function OpenList()
 	    if Main.Position.Y == UDim_new(1, 37) or Main.Position.Y == UDim_new(1, 36) or Main.Position.Y == UDim_new(0, -72) then
 			IgnoreNextInput = true
-			UpdateFrameSizes()
 
 			CommandInput:CaptureFocus()
 			CommandInput.Text = ""
@@ -1158,7 +1142,8 @@ function Library:CreateWindow(Properties)
 			Library:Tween(CommandsHolder, {BackgroundTransparency = 0.25}, 0.2)
 			
 			task_wait(0.1)
-			
+			UpdateFrameSizes()
+
 			for _, Instance in next, CommandsHolderScrolling:GetDescendants() do
 				if not Instance:IsA('UIListLayout') and not Instance:IsA('TextButton') then
 					if Instance:IsA('Frame') and Instance.Name ~= 'Seperation' and Instance.Name ~= 'UnclipTop' then
@@ -1209,14 +1194,6 @@ function Library:CreateWindow(Properties)
 		end
 	end
 
-	local ChangedText = CommandInput:GetPropertyChangedSignal("Text"):Connect(function()
-	    if IgnoreNextInput then
-            CommandInput.Text = ""
-            IgnoreNextInput = false
-		end
-	end)
-	table_insert(Library.Connections, ChangedText)
-
 	local Added = CommandsHolderScrolling.ChildAdded:Connect(UpdateFrameSizes)
 	local Removed = CommandsHolderScrolling.ChildRemoved:Connect(UpdateFrameSizes)
 
@@ -1233,70 +1210,145 @@ function Library:CreateWindow(Properties)
 		end
 	end)
 	table_insert(Library.Connections, Pressed)
-	
+
+	-- // @Search Engine
 	local function GetCorrectedCommand(Input)
 	    Input = Input:lower()
-		local BestMatch = nil
-		local BestDistance = math_huge
+		local Matches = {}
 
-		for cmdName, _ in pairs(Commands) do
-			local Distance = Library:LevenshteinDistance(Input, cmdName)
-			if Distance < BestDistance and Distance <= 2 then
-                BestDistance = Distance
-                BestMatch = cmdName
+		for cmdName, cmdData in pairs(Commands) do
+            if cmdName:sub(1, #Input) == Input then
+                table_insert(Matches, {name = cmdName, data = cmdData, type = "prefix"})
+			else
+                local Distance = Library:LevenshteinDistance(Input, cmdName)
+                if Distance <= 2 then
+                    table_insert(Matches, {name = cmdName, data = cmdData, type = "fuzzy", distance = Distance})
+				end
 			end
 		end
-		
-		return BestMatch, BestDistance
+
+		table.sort(Matches, function(a, b)
+		    if a.type ~= b.type then
+                return a.type == "prefix"
+			elseif a.type == "fuzzy" then
+                return a.distance < b.distance
+			end
+			return a.name < b.name
+		end)
+		return Matches
 	end
 
-	-- // @Execute Command
-	local function Execute(String)
-	    local Split = String:split(' ')
-		local Arguments = {}
-		local First = Split[1]:lower():gsub(Library:KeyCodeToString(Library.Prefix), '')
-
-		CommandInput.Text = ''
-		local Command = Commands[First]
-
-		if not Command then
-			local Corrected, Distance = GetCorrectedCommand(First)
-			if Corrected then
-                Command = Commands[Corrected]
-				First = Corrected
-			end
-		end
-
-		if not Command then 
-            Library:CreateNotification("Validator.exe", 'Command Not Found: ' .. First)
-			CloseList()
-			Library:Log('Error', 'Command Not Found: ' .. First)
+	-- // @Search Commands
+	local SearchEngine = CommandInput:GetPropertyChangedSignal('Text'):Connect(function()
+		if IgnoreNextInput then
+			CommandInput.Text = ""
+			IgnoreNextInput = false
 			return
 		end
 
-		local NumberOfArguments = #Command.Arguments
+		if CommandInput.Text == '' then
+			for _, Instance in next, CommandsHolderScrolling:GetChildren() do
+				if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
+					Instance.Visible = true
+					UpdateFrameSizes()
+				end
+			end
+		else
+			local Split = CommandInput.Text:split()
+			local Full = ''
+
+			for Index in next, Split do
+				if Index == 1 then
+					Full = Full .. Split[1]:gsub(Library:KeyCodeToString(Library.Prefix), '')
+				else
+					Full = Full .. Split[Index]
+				end
+			end
+
+			CommandInput.Text = Full
+
+			local CleanSearch = Full:lower()
+			local Commands = GetCorrectedCommand(CleanSearch)
+
+			for _, Instance in next, CommandsHolderScrolling:GetChildren() do
+				if not Instance:IsA('UIListLayout') and Instance.Name ~= 'UnclipTop' then
+					local CommandName = Instance.Name:gsub('CommandHolder', ''):lower()
+
+					local FoundString = false
+					for _, cmd in ipairs(Commands) do
+						if cmd.name == CommandName then
+							FoundString = true
+							break
+						end
+					end
+
+                    if not FoundString and #Commands == 0 then
+                        if string_find(CommandName, CleanSearch) then
+                            FoundString = true
+                        end
+					end
+
+					Instance.Visible = FoundString
+					UpdateFrameSizes()
+				end
+			end
+		end
+	end)
+    table_insert(Library.Connections, SearchEngine)
+
+	-- // @Execute Command
+    local function Execute(String)
+        local Split = String:split(' ')
+		local Arguments = {}
+		local First = Split[1]:lower():gsub(Library:KeyCodeToString(Library.Prefix), '')
+		
+		CommandInput.Text = ''
+		local Correction = GetCorrectedCommand(First)
+		
+		if #Correction == 0 then
+			Library:CreateNotification("Validator.exe", 'Command Not Found: ' .. First)
+			CloseList()
+		    return
+		end
+    
+        if #Correction > 1 then
+			local Suggestions = {}
+			for i, match in ipairs(Correction) do
+				local cmdData = Commands[match.name]
+				local argString = ""
+				if cmdData and cmdData.Arguments and #cmdData.Arguments > 0 then
+					argString = " {" .. table.concat(cmdData.Arguments, "} {") .. "}"
+				end
+				table_insert(Suggestions, string_format("%s%s - %s", match.name, argString, cmdData.Description))
+			end
+			
+			Library:CreateNotification("What Did you mean?",  table.concat(Suggestions, "\n"), 5)
+			CloseList()
+			return
+		end
+
+	    local Command = Commands[Correction[1].name]
+	    local NumberOfArguments = #Command.Arguments
 
 		for Index, Argument in next, Split do
 			if Index > 1 then
 				table_insert(Arguments, Argument)
 			end
 		end
-		
-		if NumberOfArguments > #Arguments then
-			local Missing = ''
+    
+        if NumberOfArguments > #Arguments then
+			local Missing = {}
 			for Index = 1, NumberOfArguments do
 				if not Arguments[Index] then
-					Missing = Missing .. tostring(Command.Arguments[Index])
+					table_insert(Missing, Command.Arguments[Index])
 				end
 			end
 
-			Library:CreateNotification("Validator.exe", 'Missing Arguments: ' .. Missing .. ' | Command: ' .. First)
+		    Library:CreateNotification("Validator.exe", 'Missing Arguments: ' .. table.concat(Missing, ', ') .. ' | Command: ' .. Correction[1].name)
 			CloseList()
-
-			Library:Log('Error', 'Missing Arguments: ' .. Missing .. ' | Command: ' .. First)
 		else
-			task_spawn(Command.Callback, Arguments, LocalPlayer)
-			CloseList()
+            task_spawn(Command.Callback, Arguments, LocalPlayer)
+            CloseList()
 		end
 	end
 
@@ -1357,9 +1409,7 @@ function Library:CreateWindow(Properties)
 	end
 
 	function WindowFunctions:AddTheme(Name, Theme)
-		if Library.Themes[Name] then
-			Library:Log('Error', 'A Theme Already Exists With The Name' .. Name)
-		else
+		if not Library.Themes[Name] then
 			Library.Themes[Name:lower()] = Theme
 		end
 	end
@@ -1510,8 +1560,6 @@ function Library:CreateWindow(Properties)
 				end
 
 				UpdateNotifications()
-			else
-				Library:Log('Error', 'Theme Doesn\'t exist: ' .. NewTheme)
 			end
 		end
 	end
@@ -1704,8 +1752,8 @@ local Window = Library:CreateWindow({
 
 Window:NewSection('Main');
 
-Window:AddCommand('theme', {'Theme'}, 'Dark, Light, Red, Orange, Purple, Blue, Nordic, Krnl', function(Arguments, Speaker)
-    local Theme = string_lower(Arguments[1])
+Window:AddCommand('Theme', {'Theme'}, 'Dark, Light, Red, Orange, Purple, Blue, Nordic, Krnl', function(Arguments, Speaker)
+    local Theme = string.lower(Arguments[1])
     if Library.Themes[Theme] then
         Window:ChangeTheme(Theme); Window:SaveTheme(Theme)
     else
@@ -1713,7 +1761,7 @@ Window:AddCommand('theme', {'Theme'}, 'Dark, Light, Red, Orange, Purple, Blue, N
     end
 end)
 
-Window:AddCommand('prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, Speaker)
+Window:AddCommand('Prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, Speaker)
     local NewPrefix = Arguments[1]
 
     if not NewPrefix or #NewPrefix ~= 1 then
@@ -1723,7 +1771,7 @@ Window:AddCommand('prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, 
 
     local byte = string.byte(NewPrefix)
 
-    if (byte >= 97 and byte <= 122) or (byte >= 48 and byte <= 57) or byte == 59 or byte == 47 or byte == 44 or byte == 46 then
+    if (byte >= 97 and byte <= 122) or (byte >= 65 and byte <= 90) or (byte >= 48 and byte <= 57) or byte == 39 or byte == 34 or byte == 92 or byte == 59 or byte == 91 or byte == 93 or byte == 46 or byte == 44 or byte == 47 or byte == 96 or byte == 45 or byte == 61 then
         Window:ChangePrefix(NewPrefix)
         Window:CreateNotification(Project, 'Your new Prefix is ' .. NewPrefix)
     else
@@ -1731,13 +1779,17 @@ Window:AddCommand('prefix', {'Key'}, 'Changes the Prefix.', function(Arguments, 
     end
 end)
 
-Window:AddCommand('serverhop', {}, 'Serverhops for you.', function(Arguments, Speaker)
+Window:AddCommand('Serverhop', {}, 'Serverhops for you.', function(Arguments, Speaker)
     Window:CreateNotification(Project, 'Attempts to serverhop you...')
 	loadstring(game:HttpGet("https://pastebin.com/raw/UTDqLRxP"))();
 end)
 
-Window:AddCommand('unload', {}, 'Unloads the Framework', function(Arguments, Speaker)
+Window:AddCommand('Unload', {}, 'Unloads the Framework', function(Arguments, Speaker)
     Window:Unload()
+end)
+
+Window:AddCommand('Ungee', {}, 'Unloads the Framework', function(Arguments, Speaker)
+    warn("a")
 end)
 
 return Library
